@@ -8,10 +8,10 @@ namespace Library_System
 {
     public partial class Borrowbook : Form
     {
-        private int currentStudentId; // Store the logged-in student's ID (actual StudentId from Student table)
-        private int currentUserRoleId; // Store the user's role
+        private int currentStudentId;
+        private int currentUserRoleId;
+        private object lblHistoryCount;
 
-        // Constructor to receive user information from login
         public Borrowbook(int studentId, int roleId)
         {
             InitializeComponent();
@@ -28,6 +28,7 @@ namespace Library_System
         private void Borrowbook_Load(object sender, EventArgs e)
         {
             LoadBooks();
+            LoadBorrowHistory(); // Load student's borrow history
         }
 
         // Load books into DataGridView
@@ -40,7 +41,6 @@ namespace Library_System
                 {
                     con.Open();
 
-                    // Query with both IDs and Names (useful for editing)
                     string query = @"SELECT 
                                         b.[Book Id] AS BookId,
                                         b.BookTittle,
@@ -64,23 +64,19 @@ namespace Library_System
                         DataTable dt = new DataTable();
                         adapter.Fill(dt);
 
-                        // Bind to DataGridView
                         dgvBooks.DataSource = dt;
 
-                        // Hide ID columns (but they're still accessible)
                         if (dgvBooks.Columns.Contains("AuthorId"))
                             dgvBooks.Columns["AuthorId"].Visible = false;
 
                         if (dgvBooks.Columns.Contains("CategoryId"))
                             dgvBooks.Columns["CategoryId"].Visible = false;
 
-                        // Rename column headers for better display
                         dgvBooks.Columns["BookTittle"].HeaderText = "Book Title";
                         dgvBooks.Columns["AuthorName"].HeaderText = "Author";
                         dgvBooks.Columns["CategoryName"].HeaderText = "Category";
                         dgvBooks.Columns["AvailableCopies"].HeaderText = "Available Copies";
 
-                        // Optional: Set column widths
                         dgvBooks.Columns["BookTittle"].Width = 200;
                         dgvBooks.Columns["AuthorName"].Width = 150;
                         dgvBooks.Columns["CategoryName"].Width = 120;
@@ -94,12 +90,104 @@ namespace Library_System
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        // Load borrow history for current student
+        private void LoadBorrowHistory()
+        {
+            try
+            {
+                // DEBUG: Show StudentId
+                MessageBox.Show($"StudentId: {currentStudentId}", "Debug Info");
+
+                if (dgvBooks.SelectedRows.Count == 0)
+                {
+                    string connection = ConfigurationManager.ConnectionStrings["libraryCon"].ConnectionString;
+                    using (SqlConnection con = new SqlConnection(connection))
+                    {
+                        con.Open();
+
+                        // Query to get current student's borrow history
+                        string query = @"SELECT 
+                                        br.BorrowId,
+                                        br.BookId,
+                                        b.BookTittle,
+                                        a.AuthorName,
+                                        c.CategoryName,
+                                        b.AvailableCopies,
+                                        br.BorrowDate,
+                                        br.ReturnDate
+                                    FROM 
+                                        Borrowing br
+                                    INNER JOIN 
+                                        Books b ON br.BookId = b.[Book Id]
+                                    INNER JOIN 
+                                        Author a ON b.AuthorId = a.AuthorId
+                                    INNER JOIN 
+                                        Category c ON b.CategoryId = c.CategoryId
+                                    WHERE 
+                                        br.StudentId = @studentId
+                                    ORDER BY 
+                                        br.BorrowDate DESC";
+
+                        using (SqlCommand cmd = new SqlCommand(query, con))
+                        {
+                            cmd.Parameters.AddWithValue("@studentId", currentStudentId);
+
+                            SqlDataAdapter adapter = new SqlDataAdapter(cmd);
+                            DataTable dt = new DataTable();
+                            adapter.Fill(dt);
+
+                            // Bind to history DataGridView
+                            dgvHistory.DataSource = dt;
+
+                            // Hide ID columns
+                            if (dgvHistory.Columns.Contains("BorrowId"))
+                                dgvHistory.Columns["BorrowId"].Visible = false;
+
+                            if (dgvHistory.Columns.Contains("BookId"))
+                                dgvHistory.Columns["BookId"].Visible = false;
+
+                            // Rename and format column headers (same as books grid)
+                            dgvHistory.Columns["BookTittle"].HeaderText = "Book Title";
+                            dgvHistory.Columns["AuthorName"].HeaderText = "Author";
+                            dgvHistory.Columns["CategoryName"].HeaderText = "Category";
+                            dgvHistory.Columns["AvailableCopies"].HeaderText = "Available Copies";
+                            dgvHistory.Columns["BorrowDate"].HeaderText = "Borrow Date";
+                            dgvHistory.Columns["ReturnDate"].HeaderText = "Return Date";
+
+                            // Format date columns
+                            dgvHistory.Columns["BorrowDate"].DefaultCellStyle.Format = "dd/MM/yyyy";
+                            dgvHistory.Columns["ReturnDate"].DefaultCellStyle.Format = "dd/MM/yyyy";
+
+                            // Set column widths (same as books grid)
+                            dgvHistory.Columns["BookTittle"].Width = 200;
+                            dgvHistory.Columns["AuthorName"].Width = 150;
+                            dgvHistory.Columns["CategoryName"].Width = 120;
+                            dgvHistory.Columns["AvailableCopies"].Width = 100;
+                            dgvHistory.Columns["BorrowDate"].Width = 100;
+                            dgvHistory.Columns["ReturnDate"].Width = 100;
+
+                            // Set as read-only
+                            dgvHistory.ReadOnly = true;
+
+                            // Show record count
+                            //lblHistoryCount.Text = $"Your Borrow History: {dt.Rows.Count} book(s)";
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error loading borrow history: " + ex.Message, "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         // Borrow button click event
         private void borrowBtn_Click(object sender, EventArgs e)
         {
             try
             {
-                // Check if a book is selected
                 if (dgvBooks.SelectedRows.Count == 0)
                 {
                     MessageBox.Show("Please select a book to borrow.", "No Selection",
@@ -107,13 +195,11 @@ namespace Library_System
                     return;
                 }
 
-                // Get selected book details
                 DataGridViewRow selectedRow = dgvBooks.SelectedRows[0];
                 int bookId = Convert.ToInt32(selectedRow.Cells["BookId"].Value);
                 string bookTitle = selectedRow.Cells["BookTittle"].Value.ToString();
                 int availableCopies = Convert.ToInt32(selectedRow.Cells["AvailableCopies"].Value);
 
-                // Check if book is available
                 if (availableCopies <= 0)
                 {
                     MessageBox.Show("This book is currently not available.", "Not Available",
@@ -121,11 +207,9 @@ namespace Library_System
                     return;
                 }
 
-                // Calculate borrow and return dates
                 DateTime borrowDate = DateTime.Now;
                 DateTime returnDate = borrowDate.AddDays(14);
 
-                // Show confirmation message with dates
                 string message = $"Book: {bookTitle}\n\n" +
                                $"Borrow Date: {borrowDate.ToString("dddd, MMMM dd, yyyy")}\n" +
                                $"Return Date: {returnDate.ToString("dddd, MMMM dd, yyyy")}\n\n" +
@@ -137,7 +221,6 @@ namespace Library_System
 
                 if (result == DialogResult.OK)
                 {
-                    // Save borrowing record to database
                     bool success = SaveBorrowRecord(bookId, currentStudentId, borrowDate, returnDate);
 
                     if (success)
@@ -145,8 +228,9 @@ namespace Library_System
                         MessageBox.Show("Book borrowed successfully!", "Success",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                        // Refresh the books list to show updated available copies
+                        // Refresh both grids
                         LoadBooks();
+                        LoadBorrowHistory(); // Refresh history to show new borrow
                     }
                 }
             }
@@ -165,7 +249,6 @@ namespace Library_System
             {
                 con.Open();
 
-                // Start a transaction to ensure both operations complete successfully
                 using (SqlTransaction transaction = con.BeginTransaction())
                 {
                     try
@@ -180,7 +263,6 @@ namespace Library_System
                             cmdInsert.Parameters.AddWithValue("@studentId", studentId);
                             cmdInsert.Parameters.AddWithValue("@borrowDate", borrowDate);
                             cmdInsert.Parameters.AddWithValue("@returnDate", returnDate);
-                            cmdInsert.Parameters.AddWithValue("@fineAmount", 0); // Initial fine is 0
 
                             cmdInsert.ExecuteNonQuery();
                         }
@@ -196,13 +278,11 @@ namespace Library_System
                             cmdUpdate.ExecuteNonQuery();
                         }
 
-                        // Commit transaction if both operations succeed
                         transaction.Commit();
                         return true;
                     }
                     catch (Exception ex)
                     {
-                        // Rollback transaction if any error occurs
                         transaction.Rollback();
                         MessageBox.Show("Database error: " + ex.Message, "Error",
                             MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -212,50 +292,12 @@ namespace Library_System
             }
         }
 
-        // Check if student has already borrowed this book and not returned it
-        private bool HasAlreadyBorrowedBook(int bookId, int studentId)
-        {
-            try
-            {
-                string connection = ConfigurationManager.ConnectionStrings["libraryCon"].ConnectionString;
-                using (SqlConnection con = new SqlConnection(connection))
-                {
-                    con.Open();
-
-                    // Check for active borrows (you might need to add a Status column to track returns)
-                    string query = @"SELECT COUNT(*) 
-                                   FROM Borrow 
-                                   WHERE BookId = @bookId 
-                                   AND StudentId = @studentId 
-                                   AND ReturnDate >= @today";
-
-                    using (SqlCommand cmd = new SqlCommand(query, con))
-                    {
-                        cmd.Parameters.AddWithValue("@bookId", bookId);
-                        cmd.Parameters.AddWithValue("@studentId", studentId);
-                        cmd.Parameters.AddWithValue("@today", DateTime.Now);
-
-                        int count = (int)cmd.ExecuteScalar();
-                        return count > 0;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error checking borrow status: " + ex.Message, "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return false;
-            }
-        }
-
         private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
-            // Optional: Handle cell click if needed
         }
 
         private void dgvHistory_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
-            // Optional: Handle history cell click if needed
         }
     }
 }
