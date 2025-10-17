@@ -297,10 +297,8 @@ Library System Team
 
                     otpForm.Close();
 
-                    // Navigate to BorrowBook form
-                    AdminHomeFrm adminHm = new AdminHomeFrm();
-                    adminHm.Show();
-                    this.Hide();
+                    // Navigate based on role
+                    NavigateByRole(userRoleId, userId);
                 }
                 else
                 {
@@ -315,6 +313,87 @@ Library System Team
             }
         }
 
+        // Navigate to appropriate form based on user role
+        private void NavigateByRole(int roleId, int userId)
+        {
+            try
+            {
+                if (roleId == 3) // Student
+                {
+                    // Get StudentId from Student table using UserId
+                    int studentId = GetStudentIdFromUserId(userId);
+
+                    if (studentId > 0)
+                    {
+                        Borrowbook borrowForm = new Borrowbook(studentId, roleId);
+                        borrowForm.Show();
+                        this.Hide();
+                    }
+                    else
+                    {
+                        MessageBox.Show("Student record not found. Please contact administrator.",
+                            "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                else if (roleId == 2) // Librarian
+                {
+                    LibrarianHomeFrm librarianForm = new LibrarianHomeFrm(userId, roleId);
+                    librarianForm.Show();
+                    this.Hide();
+                }
+                else if (roleId == 1) // Admin
+                {
+                    AdminHomeFrm adminForm = new AdminHomeFrm(userId, roleId);
+                    adminForm.Show();
+                    this.Hide();
+                }
+                else
+                {
+                    MessageBox.Show("Unknown role. Please contact administrator.",
+                        "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error during navigation: " + ex.Message, "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Get StudentId from Student table using UserId
+        private int GetStudentIdFromUserId(int userId)
+        {
+            try
+            {
+                string connection = ConfigurationManager.ConnectionStrings["libraryCon"].ConnectionString;
+                using (SqlConnection con = new SqlConnection(connection))
+                {
+                    con.Open();
+                    string query = "SELECT StudentId FROM Student WHERE UserId = @userId";
+
+                    using (SqlCommand cmd = new SqlCommand(query, con))
+                    {
+                        cmd.Parameters.AddWithValue("@userId", userId);
+                        object result = cmd.ExecuteScalar();
+
+                        if (result != null && result != DBNull.Value)
+                        {
+                            return Convert.ToInt32(result);
+                        }
+                        else
+                        {
+                            return 0;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error retrieving Student ID: " + ex.Message, "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 0;
+            }
+        }
 
         private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
