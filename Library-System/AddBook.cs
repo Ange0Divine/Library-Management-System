@@ -42,7 +42,7 @@ namespace Library_System
                 placeholderRow["AuthorId"] = 0;
 
                 // Set the DisplayMember text to the desired prompt
-                placeholderRow["AuthorName"] = "-- Select an Author --";
+                placeholderRow["AuthorName"] = " ";
                 
 
                 dt.Rows.InsertAt(placeholderRow, 0);
